@@ -1,0 +1,14 @@
+{
+  "name": "Eleição Esportiva — Clube de Esportes",
+  "short_name": "Eleição Esportiva",
+  "description": "Eleição simulada educacional offline-first do Grupo 06.",
+  "lang": "pt-BR",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f6f1",
+  "theme_color": "#102b25",
+  "icons": [
+    { "src": "./assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

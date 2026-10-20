@@ -1,0 +1,28 @@
+ROTEIRO DE DEMONSTRAÇÃO — ATÉ 7 MINUTOS
+
+1. Contexto (0:00–2:00)
+"Somos o Grupo 06 e desenvolvemos uma eleição simulada para o Clube de Esportes. A ideia principal é demonstrar o que continua funcionando quando a internet cai."
+
+2. Fluxo da aplicação (2:00–4:00)
+- Mostrar candidatos e propostas.
+- Selecionar uma chapa e confirmar voto.
+- Mostrar que uma segunda votação fica bloqueada no mesmo navegador.
+- Abrir Apuração e explicar que os números são locais e fictícios.
+
+3. Offline-first (4:00–6:00)
+- DevTools > Application > Service Workers e Cache Storage.
+- DevTools > Network > Offline.
+- Recarregar a página e demonstrar que ela abre com arquivos em cache.
+- Se ainda não houver voto, registrar um voto de teste offline.
+- Mostrar operação pendente e restaurar a conexão.
+- Clicar em "Tentar sincronizar" e explicar que, nesta versão sem backend, a sincronização é uma simulação local.
+
+4. Performance e notificações (6:00–7:00)
+- Mostrar preload, prefetch e DNS-prefetch no HTML.
+- Clicar em "Testar notificação" e conceder permissão.
+- Explicar que push remoto real exigiria backend, inscrição Push e VAPID.
+
+Pergunta do professor:
+"Se eu desligar a internet, o que continua funcionando e por quê?"
+Resposta sugerida:
+"A página e os recursos essenciais que já foram armazenados no Cache Storage continuam disponíveis. Os votos simulados ficam guardados localmente, no IndexedDB/LocalStorage. Quando a conexão retorna, a aplicação tenta processar a fila. Nesta versão, não enviamos dados a um servidor; isso está documentado como limitação."

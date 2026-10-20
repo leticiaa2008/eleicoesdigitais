@@ -1,0 +1,1 @@
+Salve nesta pasta capturas reais do DevTools e da aplicação: Service Worker ativo, Cache Storage, modo Offline, voto pendente, sincronização após reconectar, notificação e Network/Lighthouse.

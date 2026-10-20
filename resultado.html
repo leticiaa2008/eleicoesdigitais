@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102b25"><meta name="description" content="Apuração fictícia da eleição esportiva.">
+  <title>Apuração | Eleição Esportiva</title>
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml"><link rel="manifest" href="./manifest.json">
+  <link rel="preload" href="./style.css" as="style"><link rel="stylesheet" href="./style.css">
+  <link rel="dns-prefetch" href="//fonts.googleapis.com"><link rel="dns-prefetch" href="//fonts.gstatic.com">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Montserrat:wght@600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="prefetch" href="./index.html">
+</head>
+<body>
+  <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+  <header class="topbar">
+    <a class="brand" href="./index.html"><span class="brand-mark">🏆</span><span><strong>ELEIÇÃO</strong><small>ESPORTIVA</small></span></a>
+    <nav class="nav" aria-label="Navegação principal"><a href="./index.html">Início</a><a href="./index.html#candidatos">Candidatos</a><a class="active" href="./resultado.html">Apuração</a></nav>
+    <div class="connection"><span id="connectionDot" class="status-dot"></span><span id="connectionText">Verificando conexão…</span></div>
+  </header>
+  <main id="conteudo" class="results-page">
+    <section class="results-hero"><p class="eyebrow"><span class="eyebrow-line"></span> CENTRAL DE APURAÇÃO</p><h1>OS RESULTADOS<br><span>ENTRAM EM CAMPO.</span></h1><p>Veja os números da eleição simulada do Clube de Esportes.</p><div class="results-meta"><span class="meta-pill">● DADOS FICTÍCIOS</span><span id="resultsUpdated">Atualizado neste dispositivo</span></div></section>
+    <section class="section results-section">
+      <div class="results-overview"><div class="overview-card"><span class="overview-label">VOTOS REGISTRADOS NESTE NAVEGADOR</span><strong id="totalVotes">0</strong><small>Contagem local demonstrativa</small></div><div class="overview-card"><span class="overview-label">OPERAÇÕES PENDENTES</span><strong id="pendingVotes">0</strong><small>Aguardando sincronização local</small></div><div class="overview-card"><span class="overview-label">STATUS DA CONEXÃO</span><strong id="networkStatus">—</strong><small id="networkDetail">Status do navegador</small></div></div>
+      <div class="results-heading"><div><p class="eyebrow dark-eyebrow">PLACAR DA ELEIÇÃO</p><h2>Votos por candidatura</h2></div><button class="button button-outline" id="refreshResults" type="button">↻ Atualizar</button></div>
+      <div id="resultsList" class="results-list"></div>
+      <div class="results-note"><span>ⓘ</span><p>Os números representam somente os votos simulados armazenados neste navegador. Eles não são resultados oficiais nem são compartilhados entre dispositivos.</p></div>
+      <div class="results-actions"><a class="button button-primary" href="./index.html#candidatos">Voltar à eleição ↗</a><button class="button button-outline" id="notifyResults" type="button">Notificar apuração</button></div>
+    </section>
+  </main>
+  <footer class="footer"><a class="brand footer-brand" href="./index.html"><span class="brand-mark">🏆</span><span><strong>ELEIÇÃO</strong><small>ESPORTIVA</small></span></a><span>Projeto prático · Técnico em Desenvolvimento de Sistemas</span><span>Grupo 06 — Clube de Esportes</span></footer>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102b25">
+  <meta name="description" content="Eleição simulada do Clube de Esportes — projeto educacional offline-first.">
+  <title>Eleição Esportiva | Clube de Esportes</title>
+  <link rel="icon" href="./assets/icon.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="preload" href="./style.css" as="style">
+  <link rel="stylesheet" href="./style.css">
+  <link rel="dns-prefetch" href="//fonts.googleapis.com">
+  <link rel="dns-prefetch" href="//fonts.gstatic.com">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Montserrat:wght@600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="prefetch" href="./resultado.html">
+</head>
+<body>
+  <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+  <header class="topbar">
+    <a class="brand" href="./index.html" aria-label="Eleição Esportiva, início">
+      <span class="brand-mark" aria-hidden="true">🏆</span>
+      <span><strong>ELEIÇÃO</strong><small>ESPORTIVA</small></span>
+    </a>
+    <nav class="nav" aria-label="Navegação principal">
+      <a class="active" href="./index.html">Início</a>
+      <a href="#candidatos">Candidatos</a>
+      <a href="./resultado.html">Apuração</a>
+    </nav>
+    <div class="connection"><span id="connectionDot" class="status-dot"></span><span id="connectionText">Verificando conexão…</span></div>
+  </header>
+
+  <main id="conteudo">
+    <section class="hero">
+      <div class="hero-content">
+        <p class="eyebrow"><span class="eyebrow-line"></span> GRUPO 06 · CLUBE DE ESPORTES</p>
+        <h1>SEU CLUBE.<br><span>SUA VOZ.</span><br>SUA ESCOLHA.</h1>
+        <p class="hero-copy">Conheça as ideias, escolha quem vai representar o clube e participe desta eleição simulada — mesmo quando a internet falhar.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#candidatos">Conhecer candidatos <span aria-hidden="true">↗</span></a>
+          <a class="button button-ghost" href="./resultado.html">Ver apuração</a>
+        </div>
+        <div class="hero-note"><span class="live-pulse"></span> ELEIÇÃO EDUCACIONAL · VOTOS FICTÍCIOS</div>
+      </div>
+      <div class="hero-art" aria-label="Ilustração de campo esportivo">
+        <div class="art-glow"></div>
+        <div class="stadium-ring ring-one"></div><div class="stadium-ring ring-two"></div>
+        <div class="stadium-score"><span>CLUBE</span><strong>06</strong><small>ESCOLHA O FUTURO</small></div>
+        <div class="floating-card card-top"><span>⚡</span><div><strong>Ideias em campo</strong><small>Propostas para melhorar</small></div></div>
+        <div class="floating-card card-bottom"><span>✓</span><div><strong>Voto protegido</strong><small>Simulação local</small></div></div>
+        <div class="field-lines"><div class="field-mid"></div><div class="field-circle"></div><div class="field-box left"></div><div class="field-box right"></div></div>
+      </div>
+      <div class="hero-stats">
+        <div><strong>03</strong><span>CANDIDATURAS</span></div>
+        <div><strong>01</strong><span>VOTO SIMULADO POR SESSÃO</span></div>
+        <div><strong>24/7</strong><span>RECURSOS ESSENCIAIS OFFLINE*</span></div>
+      </div>
+    </section>
+
+    <section class="section intro-section">
+      <div><p class="eyebrow dark-eyebrow">A DECISÃO É SUA</p><h2>Grandes times se constroem<br>com <span>boas escolhas.</span></h2></div>
+      <p class="section-copy">Leia as propostas com atenção. Esta atividade demonstra como uma aplicação web pode armazenar recursos essenciais e registrar operações localmente quando a conexão cai.</p>
+    </section>
+
+    <section class="section candidates-section" id="candidatos">
+      <div class="section-heading">
+        <div><p class="eyebrow dark-eyebrow">CONHEÇA AS CHAPAS</p><h2>Quem entra em campo?</h2></div>
+        <span class="section-counter">03 CANDIDATURAS</span>
+      </div>
+      <div id="candidateGrid" class="candidate-grid" aria-live="polite"></div>
+    </section>
+
+    <section class="offline-banner">
+      <div class="offline-icon">⌁</div>
+      <div><p class="eyebrow">TECNOLOGIA A FAVOR DA CONTINUIDADE</p><h2>A conexão caiu.<br><span>A experiência continua.</span></h2><p>Os recursos já armazenados ficam disponíveis. Se uma operação for registrada offline, ela entra na fila local e poderá ser sincronizada depois.</p></div>
+      <div class="offline-status-card"><span class="status-dot" id="bannerDot"></span><strong id="bannerStatus">Verificando status</strong><small id="pendingSummary">0 operações pendentes</small><button class="button button-light" id="syncButton" type="button">Tentar sincronizar</button></div>
+    </section>
+
+    <section class="section tech-section">
+      <div class="section-heading"><div><p class="eyebrow dark-eyebrow">POR TRÁS DA EXPERIÊNCIA</p><h2>Resiliente por projeto.</h2></div></div>
+      <div class="tech-grid">
+        <article class="tech-card"><span class="tech-icon">▣</span><h3>Cache inteligente</h3><p>O Service Worker guarda os arquivos essenciais e responde a requisições com recursos locais quando necessário.</p></article>
+        <article class="tech-card"><span class="tech-icon">↻</span><h3>Fila offline</h3><p>As operações ficam no IndexedDB com status pendente até que a sincronização seja possível.</p></article>
+        <article class="tech-card"><span class="tech-icon">♧</span><h3>Avisos relevantes</h3><p>Permita notificações para receber avisos demonstrativos sobre propostas e apuração.</p><button id="notifyButton" class="text-button" type="button">Testar notificação ↗</button></article>
+      </div>
+    </section>
+    <section class="disclaimer"><strong>Nota educacional</strong><span>Este projeto é uma demonstração acadêmica. Não é um sistema eleitoral real. Os votos ficam no navegador e a sincronização é demonstrada localmente, sem servidor central.</span></section>
+  </main>
+
+  <footer class="footer"><a class="brand footer-brand" href="./index.html"><span class="brand-mark">🏆</span><span><strong>ELEIÇÃO</strong><small>ESPORTIVA</small></span></a><span>Projeto prático · Técnico em Desenvolvimento de Sistemas</span><span>Grupo 06 — Clube de Esportes</span></footer>
+
+  <dialog id="voteDialog" class="vote-dialog">
+    <form method="dialog" class="dialog-close-form"><button class="dialog-x" aria-label="Fechar">×</button></form>
+    <div class="dialog-symbol">✓</div><p class="eyebrow dark-eyebrow">CONFIRMAÇÃO DE VOTO</p><h2 id="dialogTitle">Confirmar escolha?</h2><p id="dialogText">Seu voto será registrado nesta simulação.</p>
+    <div class="dialog-actions"><button id="confirmVote" class="button button-primary" type="button">Confirmar voto</button><button id="cancelVote" class="button button-outline" type="button">Voltar</button></div>
+  </dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js" defer></script>
+</body>
+</html>
