@@ -1,147 +1,155 @@
-// ==========================================
-// DIGITE AQUI A URL REAL DA SUA VERCEL
-// Exemplo: 'https://eleicoes-backend.vercel.app'
-// ==========================================
-const BASE_URL = 'https://eleicoesdigitais-back-git-main-leticiaa2008s-projects.vercel.app';
+// Front-end Eleições Digitais — integração corrigida com a API da Vercel.
+const API_BASE = 'https://eleicoesdigitais-back.vercel.app/api';
+let selectedCandidate = null;
+const $ = (id) => document.getElementById(id);
 
+function getVoterKey() {
+  let key = localStorage.getItem('eleicao_g6_voter_key');
+  if (!key) {
+    key = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    localStorage.setItem('eleicao_g6_voter_key', key);
+  }
+  return key;
+}
+function showToast(message) {
+  const toast = $('toast');
+  if (!toast) { alert(message); return; }
+  toast.textContent = message;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3500);
+}
+async function api(path, options = {}) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) }
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `Erro HTTP ${response.status}`);
+  return payload;
+}
+
+async function loadCandidates() {
+  const grid = $('candidateGrid');
+  if (!grid) return;
+  grid.innerHTML = '<p>Carregando candidaturas…</p>';
+  try {
+    const candidates = await api('/candidates');
+    if (!Array.isArray(candidates) || !candidates.length) {
+      grid.innerHTML = '<p>Nenhuma candidatura cadastrada na tabela candidates do Supabase.</p>';
+      return;
+    }
+    grid.innerHTML = '';
+    candidates.forEach((candidate, index) => {
+      const article = document.createElement('article');
+      article.className = 'candidate-card';
+      const coverClass = ['','cover-blue','cover-orange'][index % 3];
+      const number = candidate.number ?? candidate.id;
+      article.innerHTML = `<div class="candidate-cover ${coverClass}"><span class="candidate-number">Nº ${escapeHtml(number)}</span><span class="candidate-emoji">🏆</span></div><div class="candidate-body"><span class="candidate-role">CHAPA ${escapeHtml(number)}</span><h3>${escapeHtml(candidate.name || 'Candidato')}</h3><p class="candidate-slogan">${escapeHtml(candidate.slogan || '')}</p><div class="candidate-proposals" data-proposals="${escapeHtml(candidate.id)}"></div><button class="button button-primary vote-button" type="button">Votar nesta chapa</button></div>`;
+      article.querySelector('.vote-button').addEventListener('click', () => openVoteDialog(candidate));
+      grid.appendChild(article);
+      loadProposals(candidate.id, article.querySelector('.candidate-proposals'));
+    });
+    const counter = document.querySelector('.section-counter');
+    if (counter) counter.textContent = `${candidates.length} CANDIDATURA${candidates.length === 1 ? '' : 'S'}`;
+    setConnection(true, 'API conectada');
+  } catch (error) {
+    console.error('[API candidates]', error);
+    grid.innerHTML = `<p>Não foi possível carregar candidaturas: ${escapeHtml(error.message)}. Verifique a API e as variáveis do Supabase.</p>`;
+    setConnection(false, 'Falha na API');
+  }
+}
+async function loadProposals(candidateId, target) {
+  try {
+    const proposals = await api(`/proposals?candidate_id=${encodeURIComponent(candidateId)}`);
+    if (!proposals.length) return;
+    const list = document.createElement('details');
+    const summary = document.createElement('summary'); summary.textContent = `Ver propostas (${proposals.length})`;
+    const ul = document.createElement('ul');
+    proposals.forEach(p => { const li = document.createElement('li'); li.textContent = `${p.title}: ${p.description}`; ul.appendChild(li); });
+    list.append(summary, ul); target.appendChild(list);
+  } catch (error) { console.warn('[API proposals]', error); }
+}
+function openVoteDialog(candidate) {
+  selectedCandidate = candidate;
+  const title = $('dialogTitle'); if (title) title.textContent = `Votar em ${candidate.name}?`;
+  const text = $('dialogText'); if (text) text.textContent = 'Seu voto simulado será enviado ao backend e salvo no Supabase.';
+  const dialog = $('voteDialog');
+  if (dialog?.showModal) dialog.showModal();
+  else if (confirm(`Confirma seu voto em ${candidate.name}?`)) submitVote();
+}
+async function submitVote() {
+  if (!selectedCandidate) return;
+  const button = $('confirmVote'); if (button) { button.disabled = true; button.textContent = 'Enviando…'; }
+  try {
+    const result = await api('/votes', { method: 'POST', body: JSON.stringify({ candidate_id: selectedCandidate.id, voter_key: getVoterKey() }) });
+    $('voteDialog')?.close();
+    showToast(result.message || 'Voto gravado no Supabase.');
+    selectedCandidate = null;
+    if ($('resultsList')) await loadResults();
+  } catch (error) {
+    console.error('[API vote]', error);
+    showToast(`Não foi possível registrar o voto: ${error.message}`);
+  } finally {
+    if (button) { button.disabled = false; button.textContent = 'Confirmar voto'; }
+  }
+}
+async function loadResults() {
+  const list = $('resultsList'); if (!list) return;
+  list.innerHTML = '<p>Carregando apuração…</p>';
+  try {
+    const results = await api('/results');
+    list.innerHTML = '';
+    let total = 0;
+    results.forEach(item => { total += Number(item.votes || 0); });
+    if ($('totalVotes')) $('totalVotes').textContent = String(total);
+    results.forEach(item => {
+      const row = document.createElement('article'); row.className = 'result-row';
+      const votes = Number(item.votes || 0); const pct = Number(item.percentage || 0);
+      row.innerHTML = `<div class="result-row-top"><div><div class="result-name">${escapeHtml(item.name)}</div><div class="result-number">Chapa ${escapeHtml(item.number ?? item.id)}</div></div><div class="result-count">${votes}<small>${pct}% dos votos</small></div></div><div class="progress-track"><div class="progress-fill" style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>`;
+      list.appendChild(row);
+    });
+    if (!results.length) list.innerHTML = '<p>Não há candidaturas cadastradas para apuração.</p>';
+    if ($('resultsUpdated')) $('resultsUpdated').textContent = `Atualizado em ${new Date().toLocaleString('pt-BR')}`;
+    if ($('networkStatus')) $('networkStatus').textContent = 'Online';
+    if ($('networkDetail')) $('networkDetail').textContent = 'Dados consultados na API';
+    setConnection(true, 'API conectada');
+  } catch (error) {
+    console.error('[API results]', error);
+    list.innerHTML = `<p>Falha ao carregar resultados: ${escapeHtml(error.message)}</p>`;
+    if ($('networkStatus')) $('networkStatus').textContent = 'Erro';
+    if ($('networkDetail')) $('networkDetail').textContent = error.message;
+    setConnection(false, 'Falha na API');
+  }
+}
+function setConnection(online, message) {
+  const dot = $('connectionDot'); if (dot) dot.className = `status-dot ${online ? 'online' : 'offline'}`;
+  const label = $('connectionText'); if (label) label.textContent = message;
+  const bannerDot = $('bannerDot'); if (bannerDot) bannerDot.className = `status-dot ${online ? 'online' : 'offline'}`;
+  const bannerStatus = $('bannerStatus'); if (bannerStatus) bannerStatus.textContent = message;
+  const pending = $('pendingSummary'); if (pending) pending.textContent = online ? 'API acessível; operações enviadas diretamente' : 'Confira a conexão para sincronizar';
+}
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+}
+function setupNotifications() {
+  const button = $('notifyButton') || $('notifyResults');
+  button?.addEventListener('click', async () => {
+    if (!('Notification' in window)) return showToast('Este navegador não oferece notificações.');
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') new Notification('Eleição Esportiva', { body: 'Notificações de demonstração ativadas.', icon: './assets/icon.svg' });
+    else showToast('Permissão de notificação não concedida.');
+  });
+}
 document.addEventListener('DOMContentLoaded', () => {
-    // 1. Apaga os cards velhos estáticos e carrega os dados do Supabase
-    const cardsGrid = document.querySelector('.cards-grid');
-    if (cardsGrid) {
-        carregarCandidatos(cardsGrid);
-    }
-
-    // 2. Configura os modais
-    setupModals();
+  loadCandidates();
+  loadResults();
+  $('confirmVote')?.addEventListener('click', submitVote);
+  $('cancelVote')?.addEventListener('click', () => $('voteDialog')?.close());
+  $('refreshResults')?.addEventListener('click', loadResults);
+  $('syncButton')?.addEventListener('click', async () => { await loadCandidates(); await loadResults(); });
+  setupNotifications();
+  window.addEventListener('online', () => { loadCandidates(); loadResults(); });
 });
-
-// ==========================================
-// BUSCA CANDIDATOS NO SUPABASE
-// ==========================================
-async function carregarCandidatos(container) {
-    try {
-        const response = await fetch(`${BASE_URL}/api`);
-        if (!response.ok) throw new Error('Falha ao conectar na API');
-
-        const candidates = await response.json();
-
-        if (!Array.isArray(candidates) || candidates.length === 0) {
-            container.innerHTML = '<p style="grid-column: 1/-1; text-align: center;">Nenhum candidato encontrado no banco.</p>';
-            return;
-        }
-
-        // Limpa os cards de "Marina Costa", "Lucas Almeida" do HTML estático
-        container.innerHTML = '';
-
-        // Cria os cards dinâmicos com os dados do Supabase
-        candidates.forEach(candidate => {
-            const card = document.createElement('div');
-            card.className = 'card';
-
-            const foto = candidate.photo_url || 'assets/icon.svg';
-            const num = String(candidate.number || candidate.id).padStart(2, '0');
-
-            card.innerHTML = `
-                <div class="card-header">
-                    <span class="badge-numero">Nº ${num}</span>
-                    <img src="${foto}" alt="${candidate.name}" class="card-img" onerror="this.src='assets/icon.svg'">
-                </div>
-                <div class="card-body">
-                    <small class="chapa-tag">CHAPA ${num}</small>
-                    <h3>${candidate.name}</h3>
-                    ${candidate.slogan ? `<p class="slogan">"${candidate.slogan}"</p>` : ''}
-                    <button class="btn btn-votar" onclick="iniciarVoto(${candidate.id}, '${candidate.name}')">
-                        Votar
-                    </button>
-                </div>
-            `;
-            container.appendChild(card);
-        });
-
-    } catch (error) {
-        console.error('Erro:', error);
-        container.innerHTML = `<p style="grid-column: 1/-1; color: red; text-align: center;">
-            Erro ao carregar os dados. Verifique se a BASE_URL no app.js está correta e se a API está no ar.
-        </p>`;
-    }
-}
-
-// ==========================================
-// REGISTRA O VOTO VIA API
-// ==========================================
-async function enviarVoto(candidateId) {
-    try {
-        const response = await fetch(`${BASE_URL}/api`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ candidateId })
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-            exibirSucesso();
-        } else {
-            alert('Erro ao registrar voto: ' + (result.error || 'Erro desconhecido'));
-        }
-    } catch (error) {
-        console.error('Erro na requisição:', error);
-        alert('Erro ao conectar ao servidor para votar.');
-    }
-}
-
-// ==========================================
-// CONTROLE DOS MODAIS
-// ==========================================
-let idSelecionado = null;
-
-function iniciarVoto(id, nome) {
-    idSelecionado = id;
-    const modal = document.getElementById('modal-confirmacao');
-    const nomeEl = document.getElementById('modal-candidato-nome');
-
-    if (nomeEl) nomeEl.innerText = nome;
-
-    if (modal) {
-        modal.style.display = 'flex';
-    } else {
-        if (confirm(`Confirmar voto em ${nome}?`)) {
-            enviarVoto(id);
-        }
-    }
-}
-
-function setupModals() {
-    const btnConfirmar = document.getElementById('btn-confirmar');
-    const btnCancelar = document.getElementById('btn-cancelar');
-    const modalConfirmacao = document.getElementById('modal-confirmacao');
-
-    if (btnConfirmar) {
-        btnConfirmar.onclick = () => {
-            if (modalConfirmacao) modalConfirmacao.style.display = 'none';
-            if (idSelecionado) enviarVoto(idSelecionado);
-        };
-    }
-
-    if (btnCancelar) {
-        btnCancelar.onclick = () => {
-            if (modalConfirmacao) modalConfirmacao.style.display = 'none';
-            idSelecionado = null;
-        };
-    }
-}
-
-function exibirSucesso() {
-    const modalSucesso = document.getElementById('modal-sucesso');
-    if (modalSucesso) {
-        modalSucesso.style.display = 'flex';
-        setTimeout(() => {
-            window.location.href = 'resultado.html';
-        }, 2000);
-    } else {
-        alert('Voto registrado com sucesso!');
-        window.location.href = 'resultado.html';
-    }
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(error => console.warn('Service Worker:', error)));
 }
