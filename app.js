@@ -1,179 +1,123 @@
-// ==========================================
-// CONFIGURAÇÃO DA API
-// ==========================================
-// Substitua pela URL real do seu projeto publicado na Vercel
+// ATENÇÃO: Coloque aqui a URL que a Vercel gerou para o seu Backend
 const API_URL = 'https://eleicoesdigitais-back-git-main-leticiaa2008s-projects.vercel.app/';
 
-// ==========================================
-// BIND DOS EVENTOS DA INTERFACE (MANTIDOS DO SEU CÓDIGO)
-// ==========================================
 document.addEventListener('DOMContentLoaded', () => {
-    // Se estiver na página inicial (votação)
-    if (document.getElementById('cards-container')) {
-        carregarECandidatosVotacao();
-    }
-    
-    // Se estiver na página de resultados
-    if (document.getElementById('results-container')) {
-        carregarEResultados();
-    }
-
-    // Configuração dos modais
-    setupModals();
+    carregarCandidatos();
+    configurarModais();
 });
 
-// ==========================================
-// INTEGRACAO COM SUPABASE VIA VERCEL API
-// ==========================================
+// Procura os candidatos na API da Vercel (que vem da tabela candidates do Supabase)
+async function carregarCandidatos() {
+    // Procura os containers comuns do seu HTML
+    const container = document.getElementById('cards-container') 
+                   || document.getElementById('candidates-grid') 
+                   || document.querySelector('.candidates-grid');
 
-// Procura os candidatos no Supabase para montar a tela de votação
-async function carregarECandidatosVotacao() {
-    const container = document.getElementById('cards-container');
     if (!container) return;
 
     try {
-        const response = await fetch(`${API_URL}/candidatos`);
-        if (!response.ok) throw new Error('Erro ao carregar candidatos do servidor');
+        const response = await fetch(API_URL);
+        if (!response.ok) throw new Error('Erro ao conectar com o backend');
 
-        const candidatos = await response.json();
-        renderCards(candidatos);
+        const candidates = await response.json();
+        
+        if (!candidates || candidates.length === 0) {
+            container.innerHTML = '<p style="text-align:center; padding: 20px;">Nenhum candidato cadastrado no Supabase.</p>';
+            return;
+        }
+
+        renderizarCandidatos(candidates, container);
     } catch (error) {
-        console.error('Erro:', error);
-        container.innerHTML = `<p style="color: red; text-align: center;">Erro ao carregar os candidatos. Verifique a conexão.</p>`;
+        console.error('Erro ao carregar candidatos:', error);
+        container.innerHTML = `<p style="color: red; text-align: center; padding: 20px;">
+            Erro ao carregar os candidatos. Verifique a URL do Backend e o Supabase.
+        </p>`;
     }
 }
 
-// Renderiza os cards mantendo a sua estrutura de HTML/CSS original
-function renderCards(candidatos) {
-    const container = document.getElementById('cards-container');
+// Monta os cards dinamicamente na tela
+function renderizarCandidatos(candidates, container) {
     container.innerHTML = '';
 
-    candidatos.forEach(candidato => {
+    candidates.forEach(candidate => {
         const card = document.createElement('div');
-        card.className = 'card';
+        card.className = 'candidate-card'; // ou 'card'
+        
+        // Mapeia os campos da tabela "candidates" do seu Supabase
+        const nome = candidate.name || candidate.nome || 'Candidato';
+        const numero = candidate.number || candidate.numero || candidate.id;
+        const foto = candidate.avatar_url || candidate.foto || 'assets/icon.svg';
+        const partido = candidate.party || candidate.partido || '';
+
         card.innerHTML = `
-            <img src="${candidato.foto || 'assets/icon.svg'}" alt="${candidato.nome}">
-            <h3>${candidato.nome}</h3>
-            <p>${candidato.partido || ''}</p>
-            <button class="btn btn-votar" onclick="confirmarVoto(${candidato.id}, '${candidato.nome}')">Votar</button>
+            <img src="${foto}" alt="${nome}" onerror="this.src='assets/icon.svg'">
+            <h3>${nome}</h3>
+            <p>${partido ? partido + ' - ' : ''}Número: ${numero}</p>
+            <button class="btn btn-votar" onclick="confirmarVoto('${candidate.id}', '${nome}')">Votar</button>
         `;
         container.appendChild(card);
     });
 }
 
-// Envia o voto para o Supabase
-async function executarVoto(id) {
+// Função de Envio do Voto para a Vercel / Supabase
+async function enviarVoto(candidateId) {
     try {
-        const response = await fetch(`${API_URL}/votar`, {
+        const response = await fetch(API_URL, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ candidatoId: id })
+            body: JSON.stringify({ candidateId })
         });
 
         const data = await response.json();
 
         if (response.ok) {
-            showSuccessModal();
+            alert('Voto registrado com sucesso!');
+            window.location.href = 'resultado.html';
         } else {
-            alert(`Erro ao registrar voto: ${data.error || 'Tente novamente.'}`);
+            alert(`Erro ao computar voto: ${data.error || 'Tente novamente'}`);
         }
     } catch (error) {
-        console.error('Erro ao votar:', error);
-        alert('Erro de conexão ao tentar registrar o voto.');
+        console.error('Erro na requisição de voto:', error);
+        alert('Erro ao conectar ao servidor para registrar o voto.');
     }
 }
 
-// Procura os resultados em tempo real no Supabase para a tela de resultados
-async function carregarEResultados() {
-    const container = document.getElementById('results-container');
-    if (!container) return;
-
-    try {
-        const response = await fetch(`${API_URL}/candidatos`);
-        if (!response.ok) throw new Error('Erro ao carregar resultados');
-
-        const candidatos = await response.json();
-        
-        // Ordena por maior número de votos
-        candidatos.sort((a, b) => b.votos - a.votos);
-        
-        const totalVotos = candidatos.reduce((acc, c) => acc + (c.votos || 0), 0);
-
-        container.innerHTML = '';
-        candidatos.forEach(candidato => {
-            const percentual = totalVotos > 0 ? ((candidato.votos / totalVotos) * 100).toFixed(1) : 0;
-            
-            const item = document.createElement('div');
-            item.className = 'result-item';
-            item.innerHTML = `
-                <div class="result-info">
-                    <span><strong>${candidato.nome}</strong> (${candidato.partido || 'Sem partido'})</span>
-                    <span>${candidato.votos || 0} votos (${percentual}%)</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width: ${percentual}%"></div>
-                </div>
-            `;
-            container.appendChild(item);
-        });
-
-        const totalEl = document.getElementById('total-votos');
-        if (totalEl) totalEl.innerText = `Total de Votos: ${totalVotos}`;
-
-    } catch (error) {
-        console.error('Erro nos resultados:', error);
-    }
-}
-
-// ==========================================
-// MODAIS E CONFIRMAÇÕES (DO SEU PROJETO)
-// ==========================================
-let candidatoSelecionadoId = null;
+// Controle de Confirmação
+let idCandidatoSelecionado = null;
 
 function confirmarVoto(id, nome) {
-    candidatoSelecionadoId = id;
+    idCandidatoSelecionado = id;
     const modal = document.getElementById('modal-confirmacao');
-    const nomeEl = document.getElementById('modal-candidato-nome');
+    const modalNome = document.getElementById('modal-candidato-nome');
     
-    if (nomeEl) nomeEl.innerText = nome;
-    if (modal) modal.style.display = 'flex';
+    if (modalNome) modalNome.innerText = nome;
+    if (modal) {
+        modal.style.display = 'flex';
+    } else {
+        if (confirm(`Deseja confirmar o voto em ${nome}?`)) {
+            enviarVoto(id);
+        }
+    }
 }
 
-function setupModals() {
+function configurarModais() {
     const btnConfirmar = document.getElementById('btn-confirmar');
     const btnCancelar = document.getElementById('btn-cancelar');
     const modalConfirmacao = document.getElementById('modal-confirmacao');
-    const modalSucesso = document.getElementById('modal-sucesso');
 
     if (btnConfirmar) {
         btnConfirmar.addEventListener('click', () => {
             if (modalConfirmacao) modalConfirmacao.style.display = 'none';
-            if (candidatoSelecionadoId !== null) {
-                executarVoto(candidatoSelecionadoId);
-            }
+            if (idCandidatoSelecionado) enviarVoto(idCandidatoSelecionado);
         });
     }
 
     if (btnCancelar) {
         btnCancelar.addEventListener('click', () => {
             if (modalConfirmacao) modalConfirmacao.style.display = 'none';
-            candidatoSelecionadoId = null;
+            idCandidatoSelecionado = null;
         });
-    }
-}
-
-function showSuccessModal() {
-    const modalSucesso = document.getElementById('modal-sucesso');
-    if (modalSucesso) {
-        modalSucesso.style.display = 'flex';
-        setTimeout(() => {
-            modalSucesso.style.display = 'none';
-            window.location.href = 'resultado.html';
-        }, 2000);
-    } else {
-        alert('Voto computado com sucesso!');
-        window.location.href = 'resultado.html';
     }
 }
