@@ -1,22 +1,14 @@
-// Front-end Eleições Digitais — integração corrigida com a API da Vercel.
+// API pública do backend Eleições Digitais. Rotas reais ficam sob /api.
 const API_BASE = 'https://eleicoesdigitais-back.vercel.app/api';
-let selectedCandidate = null;
-const $ = (id) => document.getElementById(id);
-
+const API_URL = API_BASE;
+const VOTER_KEY_STORAGE = 'eleicoes_digitais_voter_key';
 function getVoterKey() {
-  let key = localStorage.getItem('eleicao_g6_voter_key');
+  let key = localStorage.getItem(VOTER_KEY_STORAGE);
   if (!key) {
-    key = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`);
-    localStorage.setItem('eleicao_g6_voter_key', key);
+    key = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}-${Math.random()}`);
+    localStorage.setItem(VOTER_KEY_STORAGE, key);
   }
   return key;
-}
-function showToast(message) {
-  const toast = $('toast');
-  if (!toast) { alert(message); return; }
-  toast.textContent = message;
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 3500);
 }
 async function api(path, options = {}) {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -24,132 +16,113 @@ async function api(path, options = {}) {
     headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) }
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || `Erro HTTP ${response.status}`);
+  if (!response.ok) throw new Error(payload.detail || payload.error || `Erro HTTP ${response.status}`);
   return payload;
 }
-
-async function loadCandidates() {
-  const grid = $('candidateGrid');
-  if (!grid) return;
-  grid.innerHTML = '<p>Carregando candidaturas…</p>';
+document.addEventListener('DOMContentLoaded', () => {
+  atualizarStatusConexao();
+  const grid = document.getElementById('candidateGrid') || document.getElementById('cards-container') || document.querySelector('.cards-grid');
+  if (grid) carregarCandidatosDoSupabase(grid);
+  if (document.getElementById('resultsList')) carregarResultados();
+  const refresh = document.getElementById('refreshResults');
+  if (refresh) refresh.addEventListener('click', carregarResultados);
+  const notify = document.getElementById('notifyResults');
+  if (notify) notify.addEventListener('click', () => alert('Apuração atualizada com os dados retornados pela API.'));
+});
+async function atualizarStatusConexao() {
+  const dot = document.getElementById('connectionDot');
+  const label = document.getElementById('connectionText');
+  try {
+    const health = await api('/health');
+    if (label) label.textContent = health.database === 'connected' ? 'Supabase conectado' : 'API online';
+    if (dot) dot.classList.add('online');
+  } catch (e) {
+    if (label) label.textContent = 'Sem conexão com API';
+    if (dot) dot.classList.add('offline');
+    console.error('Falha no health check:', e);
+  }
+}
+async function carregarCandidatosDoSupabase(container) {
+  container.innerHTML = '<p>Carregando candidaturas do Supabase…</p>';
   try {
     const candidates = await api('/candidates');
-    if (!Array.isArray(candidates) || !candidates.length) {
-      grid.innerHTML = '<p>Nenhuma candidatura cadastrada na tabela candidates do Supabase.</p>';
+    container.replaceChildren();
+    if (!Array.isArray(candidates) || candidates.length === 0) {
+      container.innerHTML = '<p>Nenhum candidato cadastrado na tabela candidates do Supabase.</p>';
       return;
     }
-    grid.innerHTML = '';
-    candidates.forEach((candidate, index) => {
-      const article = document.createElement('article');
-      article.className = 'candidate-card';
-      const coverClass = ['','cover-blue','cover-orange'][index % 3];
-      const number = candidate.number ?? candidate.id;
-      article.innerHTML = `<div class="candidate-cover ${coverClass}"><span class="candidate-number">Nº ${escapeHtml(number)}</span><span class="candidate-emoji">🏆</span></div><div class="candidate-body"><span class="candidate-role">CHAPA ${escapeHtml(number)}</span><h3>${escapeHtml(candidate.name || 'Candidato')}</h3><p class="candidate-slogan">${escapeHtml(candidate.slogan || '')}</p><div class="candidate-proposals" data-proposals="${escapeHtml(candidate.id)}"></div><button class="button button-primary vote-button" type="button">Votar nesta chapa</button></div>`;
-      article.querySelector('.vote-button').addEventListener('click', () => openVoteDialog(candidate));
-      grid.appendChild(article);
-      loadProposals(candidate.id, article.querySelector('.candidate-proposals'));
-    });
-    const counter = document.querySelector('.section-counter');
-    if (counter) counter.textContent = `${candidates.length} CANDIDATURA${candidates.length === 1 ? '' : 'S'}`;
-    setConnection(true, 'API conectada');
+    for (const candidate of candidates) {
+      const card = document.createElement('article');
+      card.className = 'candidate-card';
+      const photo = document.createElement('img');
+      photo.className = 'candidate-photo'; photo.alt = candidate.name || 'Candidato';
+      photo.src = candidate.photo_url || './assets/icon.svg';
+      photo.onerror = () => { photo.onerror = null; photo.src = './assets/icon.svg'; };
+      const number = document.createElement('p'); number.className = 'candidate-number';
+      number.textContent = `Nº ${candidate.number ?? candidate.id}`;
+      const name = document.createElement('h3'); name.textContent = candidate.name || 'Candidato sem nome';
+      const slogan = document.createElement('p'); slogan.textContent = candidate.slogan || '';
+      const button = document.createElement('button'); button.type = 'button'; button.className = 'button button-primary'; button.textContent = 'Votar';
+      button.addEventListener('click', () => confirmarVoto(candidate.id, candidate.name || 'Candidato'));
+      card.append(photo, number, name, slogan, button); container.appendChild(card);
+    }
   } catch (error) {
-    console.error('[API candidates]', error);
-    grid.innerHTML = `<p>Não foi possível carregar candidaturas: ${escapeHtml(error.message)}. Verifique a API e as variáveis do Supabase.</p>`;
-    setConnection(false, 'Falha na API');
+    console.error('Erro ao carregar candidatos:', error);
+    container.innerHTML = '';
+    const msg = document.createElement('p');
+    msg.textContent = `Não foi possível carregar os candidatos do Supabase: ${error.message}`;
+    container.appendChild(msg);
   }
 }
-async function loadProposals(candidateId, target) {
-  try {
-    const proposals = await api(`/proposals?candidate_id=${encodeURIComponent(candidateId)}`);
-    if (!proposals.length) return;
-    const list = document.createElement('details');
-    const summary = document.createElement('summary'); summary.textContent = `Ver propostas (${proposals.length})`;
-    const ul = document.createElement('ul');
-    proposals.forEach(p => { const li = document.createElement('li'); li.textContent = `${p.title}: ${p.description}`; ul.appendChild(li); });
-    list.append(summary, ul); target.appendChild(list);
-  } catch (error) { console.warn('[API proposals]', error); }
+let idCandidatoSelecionado = null;
+function confirmarVoto(id, nome) {
+  idCandidatoSelecionado = id;
+  const modal = document.getElementById('modal-confirmacao');
+  const modalNome = document.getElementById('modal-candidato-nome');
+  if (modalNome) modalNome.textContent = nome;
+  if (modal) {
+    modal.style.display = 'flex';
+    const confirmButton = document.getElementById('btn-confirmar');
+    const cancelButton = document.getElementById('btn-cancelar');
+    if (confirmButton) confirmButton.onclick = async () => { modal.style.display = 'none'; await enviarVoto(idCandidatoSelecionado); };
+    if (cancelButton) cancelButton.onclick = () => { modal.style.display = 'none'; idCandidatoSelecionado = null; };
+  } else if (confirm(`Deseja confirmar seu voto em “${nome}”?`)) enviarVoto(id);
 }
-function openVoteDialog(candidate) {
-  selectedCandidate = candidate;
-  const title = $('dialogTitle'); if (title) title.textContent = `Votar em ${candidate.name}?`;
-  const text = $('dialogText'); if (text) text.textContent = 'Seu voto simulado será enviado ao backend e salvo no Supabase.';
-  const dialog = $('voteDialog');
-  if (dialog?.showModal) dialog.showModal();
-  else if (confirm(`Confirma seu voto em ${candidate.name}?`)) submitVote();
-}
-async function submitVote() {
-  if (!selectedCandidate) return;
-  const button = $('confirmVote'); if (button) { button.disabled = true; button.textContent = 'Enviando…'; }
+async function enviarVoto(candidateId) {
   try {
-    const result = await api('/votes', { method: 'POST', body: JSON.stringify({ candidate_id: selectedCandidate.id, voter_key: getVoterKey() }) });
-    $('voteDialog')?.close();
-    showToast(result.message || 'Voto gravado no Supabase.');
-    selectedCandidate = null;
-    if ($('resultsList')) await loadResults();
+    await api('/votes', { method: 'POST', body: JSON.stringify({ candidate_id: candidateId, voter_key: getVoterKey() }) });
+    alert('Voto registrado no Supabase!');
+    window.location.href = './resultado.html';
   } catch (error) {
-    console.error('[API vote]', error);
-    showToast(`Não foi possível registrar o voto: ${error.message}`);
-  } finally {
-    if (button) { button.disabled = false; button.textContent = 'Confirmar voto'; }
+    console.error('Erro ao registrar voto:', error);
+    alert(`O voto NÃO foi registrado: ${error.message}`);
   }
 }
-async function loadResults() {
-  const list = $('resultsList'); if (!list) return;
-  list.innerHTML = '<p>Carregando apuração…</p>';
+async function carregarResultados() {
+  const list = document.getElementById('resultsList');
+  if (!list) return;
+  list.innerHTML = '<p>Carregando resultados do Supabase…</p>';
   try {
     const results = await api('/results');
-    list.innerHTML = '';
+    list.replaceChildren();
     let total = 0;
-    results.forEach(item => { total += Number(item.votes || 0); });
-    if ($('totalVotes')) $('totalVotes').textContent = String(total);
-    results.forEach(item => {
-      const row = document.createElement('article'); row.className = 'result-row';
-      const votes = Number(item.votes || 0); const pct = Number(item.percentage || 0);
-      row.innerHTML = `<div class="result-row-top"><div><div class="result-name">${escapeHtml(item.name)}</div><div class="result-number">Chapa ${escapeHtml(item.number ?? item.id)}</div></div><div class="result-count">${votes}<small>${pct}% dos votos</small></div></div><div class="progress-track"><div class="progress-fill" style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>`;
-      list.appendChild(row);
-    });
-    if (!results.length) list.innerHTML = '<p>Não há candidaturas cadastradas para apuração.</p>';
-    if ($('resultsUpdated')) $('resultsUpdated').textContent = `Atualizado em ${new Date().toLocaleString('pt-BR')}`;
-    if ($('networkStatus')) $('networkStatus').textContent = 'Online';
-    if ($('networkDetail')) $('networkDetail').textContent = 'Dados consultados na API';
-    setConnection(true, 'API conectada');
+    for (const item of results) {
+      total += Number(item.votes || 0);
+      const row = document.createElement('article'); row.className = 'result-card';
+      const title = document.createElement('h3'); title.textContent = `${item.number ?? item.id} — ${item.name}`;
+      const count = document.createElement('p'); count.textContent = `${item.votes || 0} voto(s) · ${item.percentage || 0}%`;
+      row.append(title, count); list.appendChild(row);
+    }
+    const totalEl = document.getElementById('totalVotes'); if (totalEl) totalEl.textContent = String(total);
+    const updated = document.getElementById('resultsUpdated'); if (updated) updated.textContent = `Atualizado em ${new Date().toLocaleString('pt-BR')}`;
+    const status = document.getElementById('networkStatus'); if (status) status.textContent = 'Online';
+    const detail = document.getElementById('networkDetail'); if (detail) detail.textContent = 'Dados recebidos da API/Supabase';
+    if (!results.length) list.innerHTML = '<p>O Supabase não retornou candidatos para apuração.</p>';
   } catch (error) {
-    console.error('[API results]', error);
-    list.innerHTML = `<p>Falha ao carregar resultados: ${escapeHtml(error.message)}</p>`;
-    if ($('networkStatus')) $('networkStatus').textContent = 'Erro';
-    if ($('networkDetail')) $('networkDetail').textContent = error.message;
-    setConnection(false, 'Falha na API');
+    console.error('Erro ao carregar resultados:', error);
+    list.innerHTML = '';
+    const msg = document.createElement('p'); msg.textContent = `Não foi possível carregar a apuração: ${error.message}`; list.appendChild(msg);
+    const status = document.getElementById('networkStatus'); if (status) status.textContent = 'Erro';
+    const detail = document.getElementById('networkDetail'); if (detail) detail.textContent = 'Verifique a API e o Supabase';
   }
-}
-function setConnection(online, message) {
-  const dot = $('connectionDot'); if (dot) dot.className = `status-dot ${online ? 'online' : 'offline'}`;
-  const label = $('connectionText'); if (label) label.textContent = message;
-  const bannerDot = $('bannerDot'); if (bannerDot) bannerDot.className = `status-dot ${online ? 'online' : 'offline'}`;
-  const bannerStatus = $('bannerStatus'); if (bannerStatus) bannerStatus.textContent = message;
-  const pending = $('pendingSummary'); if (pending) pending.textContent = online ? 'API acessível; operações enviadas diretamente' : 'Confira a conexão para sincronizar';
-}
-function escapeHtml(value) {
-  return String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-}
-function setupNotifications() {
-  const button = $('notifyButton') || $('notifyResults');
-  button?.addEventListener('click', async () => {
-    if (!('Notification' in window)) return showToast('Este navegador não oferece notificações.');
-    const permission = await Notification.requestPermission();
-    if (permission === 'granted') new Notification('Eleição Esportiva', { body: 'Notificações de demonstração ativadas.', icon: './assets/icon.svg' });
-    else showToast('Permissão de notificação não concedida.');
-  });
-}
-document.addEventListener('DOMContentLoaded', () => {
-  loadCandidates();
-  loadResults();
-  $('confirmVote')?.addEventListener('click', submitVote);
-  $('cancelVote')?.addEventListener('click', () => $('voteDialog')?.close());
-  $('refreshResults')?.addEventListener('click', loadResults);
-  $('syncButton')?.addEventListener('click', async () => { await loadCandidates(); await loadResults(); });
-  setupNotifications();
-  window.addEventListener('online', () => { loadCandidates(); loadResults(); });
-});
-if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(error => console.warn('Service Worker:', error)));
 }
