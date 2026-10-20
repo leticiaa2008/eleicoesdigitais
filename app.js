@@ -1,7 +1,7 @@
 /* Eleição Esportiva — Grupo 06 | Demonstração educacional offline-first */
 (() => {
   "use strict";
-  const CANDIDATES = [
+  let CANDIDATES = [
     { id: "c1", number: "01", name: "Marina Costa", role: "CHAPA 01 · ESPORTE PARA TODOS", slogan: "“Mais esporte, mais oportunidades.”", emoji: "🏃", cover: "", proposals: ["Organizar torneios entre turmas.", "Criar empréstimo de materiais esportivos.", "Promover treinos inclusivos para iniciantes."] },
     { id: "c2", number: "02", name: "Lucas Almeida", role: "CHAPA 02 · TIME EM MOVIMENTO", slogan: "“Juntos, a gente chega mais longe.”", emoji: "⚽", cover: "cover-blue", proposals: ["Melhorar a conservação da quadra.", "Montar um calendário mensal de jogos.", "Criar desafios esportivos com participação voluntária."] },
     { id: "c3", number: "03", name: "Rafaela Santos", role: "CHAPA 03 · INOVAÇÃO EM JOGO", slogan: "“Novas ideias. Um clube mais forte.”", emoji: "🏆", cover: "cover-orange", proposals: ["Criar mural digital de eventos e resultados.", "Realizar campanhas de respeito no esporte.", "Ouvir sugestões dos alunos a cada mês."] }
@@ -10,6 +10,11 @@
   const DB_VERSION = 1;
   const STORE = "operations";
   const VOTE_KEY = "eleicao-g6-vote";
+  const API_BASE = "https://eleicoesdigitais-back.vercel.app";
+  const VOTER_KEY = "eleicao-g6-voter-key";
+  const CANDIDATES_CACHE_KEY = "eleicao-g6-candidates-cache";
+  let serverResults = null;
+  const presentationTemplates = CANDIDATES.map(c => ({ role: c.role, emoji: c.emoji, cover: c.cover }));
   const TOTALS_KEY = "eleicao-g6-local-totals";
   const $ = (sel, root = document) => root.querySelector(sel);
   let selectedCandidate = null;
@@ -22,6 +27,74 @@
     el.classList.add("show");
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => el.classList.remove("show"), 3400);
+  }
+  async function apiRequest(path, options = {}) {
+    const response = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      cache: "no-store"
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(payload.error || `Erro na API (${response.status})`);
+      error.status = response.status;
+      throw error;
+    }
+    return payload;
+  }
+  function getVoterKey() {
+    let key = localStorage.getItem(VOTER_KEY);
+    if (!key) {
+      key = (window.crypto?.randomUUID?.() || `voter-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      localStorage.setItem(VOTER_KEY, key);
+    }
+    return key;
+  }
+  function mapRemoteCandidates(remoteCandidates, remoteProposals) {
+    return remoteCandidates.map((remote, index) => {
+      const template = presentationTemplates[index % presentationTemplates.length] || { role: "CLUBE DE ESPORTES", emoji: "🏆", cover: "" };
+      const proposals = remoteProposals.filter(p => String(p.candidate_id) === String(remote.id)).map(p => `${p.title}: ${p.description}`);
+      return {
+        id: String(remote.id), number: String(remote.number).padStart(2, "0"),
+        name: remote.name, role: template.role, slogan: `“${remote.slogan || "Mais esporte para todos."}”`,
+        emoji: template.emoji, cover: template.cover, proposals: proposals.length ? proposals : [remote.slogan || "Conheça as propostas desta chapa."]
+      };
+    });
+  }
+  function loadCachedCandidates() {
+    try {
+      const cached = JSON.parse(localStorage.getItem(CANDIDATES_CACHE_KEY) || "null");
+      if (cached && Array.isArray(cached.candidates) && cached.candidates.length) {
+        CANDIDATES = mapRemoteCandidates(cached.candidates, Array.isArray(cached.proposals) ? cached.proposals : []);
+        renderCandidates();
+        console.info("Candidaturas recuperadas do cache local.", CANDIDATES.length);
+      }
+    } catch (error) { console.warn("Cache de candidaturas inválido.", error); }
+  }
+  async function loadCandidatesFromAPI() {
+    if (!navigator.onLine) return;
+    try {
+      const [remoteCandidates, remoteProposals] = await Promise.all([
+        apiRequest("/api/candidates"), apiRequest("/api/proposals")
+      ]);
+      if (!Array.isArray(remoteCandidates) || !remoteCandidates.length) return;
+      localStorage.setItem(CANDIDATES_CACHE_KEY, JSON.stringify({ candidates: remoteCandidates, proposals: remoteProposals }));
+      CANDIDATES = mapRemoteCandidates(remoteCandidates, remoteProposals);
+      renderCandidates();
+      console.info("Candidaturas carregadas da API Vercel.", CANDIDATES.length);
+    } catch (error) {
+      console.warn("API indisponível; usando candidaturas salvas localmente.", error.message);
+    }
+  }
+  async function loadServerResults() {
+    if (!navigator.onLine) return false;
+    try {
+      const rows = await apiRequest("/api/results");
+      if (Array.isArray(rows)) { serverResults = rows; renderResults(); return true; }
+    } catch (error) {
+      console.warn("Não foi possível buscar a apuração da API:", error.message);
+    }
+    return false;
   }
   function getTotals() {
     try { return JSON.parse(localStorage.getItem(TOTALS_KEY)) || {}; } catch { return {}; }
@@ -94,28 +167,39 @@
   async function syncPending({ silent = false } = {}) {
     if (!navigator.onLine) {
       updatePendingCount();
-      if (!silent) toast("Você está offline. As operações continuam guardadas neste dispositivo.");
+      if (!silent) toast("Você está offline. Os votos continuam guardados neste dispositivo.");
       return false;
     }
     const pending = await getOperations();
     if (!pending.length) {
+      await loadServerResults();
       updatePendingCount();
-      if (!silent) toast("Tudo em dia: não há operações pendentes.");
+      if (!silent) toast("Tudo em dia: não há votos pendentes.");
       return true;
     }
-    // Simulação didática: sem API/backend, a conexão é usada apenas para demonstrar
-    // a passagem de "pendente" para "sincronizado". Não envia votos para um servidor.
-    try {
-      await markOperationsSynced(pending.map(item => item.id));
-      updatePendingCount();
-      if (!silent) toast(`${pending.length} operação(ões) sincronizada(s) na demonstração local.`);
-      refreshResults();
-      return true;
-    } catch (err) {
-      console.error(err);
-      if (!silent) toast("Não foi possível atualizar a fila. Tente novamente.");
-      return false;
+    const syncedIds = [];
+    let failed = false;
+    for (const item of pending) {
+      try {
+        await apiRequest("/api/votes", {
+          method: "POST",
+          body: JSON.stringify({ candidate_id: item.candidateId, voter_key: item.voterKey || getVoterKey() })
+        });
+        syncedIds.push(item.id);
+      } catch (error) {
+        // 409 indica que o servidor já recebeu um voto desta chave; não reenviar indefinidamente.
+        if (error.status === 409 && /já registrou|já.*voto|already/i.test(error.message)) syncedIds.push(item.id);
+        else { failed = true; console.warn("Voto continua pendente para sincronização:", error.message); }
+      }
     }
+    if (syncedIds.length) await markOperationsSynced(syncedIds);
+    await updatePendingCount();
+    await loadServerResults();
+    if (!silent) {
+      if (failed) toast("Alguns votos continuam pendentes. Confira a API/Supabase e tente novamente.");
+      else toast(`${syncedIds.length} voto(s) enviado(s) para o backend e Supabase.`);
+    }
+    return !failed;
   }
   async function updatePendingCount() {
     const count = (await getOperations()).length;
@@ -163,13 +247,15 @@
     const totals = getTotals();
     totals[selectedCandidate.id] = (Number(totals[selectedCandidate.id]) || 0) + 1;
     saveTotals(totals);
+    serverResults = null;
     try {
-      await addOperation({ type: "voto-simulado", candidateId: selectedCandidate.id, candidateName: selectedCandidate.name, candidateNumber: selectedCandidate.number });
+      await addOperation({ type: "voto-simulado", candidateId: selectedCandidate.id, candidateName: selectedCandidate.name, candidateNumber: selectedCandidate.number, voterKey: getVoterKey() });
       if (navigator.serviceWorker?.controller && "SyncManager" in window) {
         const reg = await navigator.serviceWorker.ready;
         if (reg.sync) await reg.sync.register("sincronizar-votos");
       }
-      toast(navigator.onLine ? "Voto simulado registrado. Operação adicionada à fila local." : "Voto guardado offline! Será possível sincronizar depois.");
+      if (navigator.onLine) { await syncPending({ silent: true }); toast("Voto registrado neste dispositivo e enviado para sincronização com o Supabase."); }
+      else toast("Voto guardado offline! Será enviado ao backend quando a conexão voltar.");
     } catch (err) {
       console.warn("IndexedDB indisponível; voto foi salvo no armazenamento local:", err);
       toast("Voto simulado salvo neste navegador. Fila offline indisponível neste ambiente.");
@@ -185,17 +271,28 @@
     const list = $("#resultsList");
     if (!list) return;
     const totals = getTotals();
-    const total = CANDIDATES.reduce((sum, c) => sum + (Number(totals[c.id]) || 0), 0);
-    const sorted = [...CANDIDATES].sort((a, b) => (Number(totals[b.id]) || 0) - (Number(totals[a.id]) || 0));
-    list.innerHTML = sorted.map(c => {
-      const count = Number(totals[c.id]) || 0;
-      const pct = total ? Math.round(count / total * 100) : 0;
-      return `<article class="result-row"><div class="result-row-top"><div><div class="result-name">${c.emoji} ${c.name}</div><div class="result-number">Chapa ${c.number} · ${c.role.split("·")[1].trim()}</div></div><div class="result-count">${count}<small>${pct}% dos votos locais</small></div></div><div class="progress-track" role="progressbar" aria-label="Percentual de votos de ${c.name}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><div class="progress-fill" style="width:${pct}%"></div></div></article>`;
-    }).join("");
+    let rows;
+    let total;
+    if (Array.isArray(serverResults)) {
+      rows = serverResults.map((remote, index) => {
+        const local = CANDIDATES.find(c => String(c.id) === String(remote.id)) || CANDIDATES[index];
+        return { candidate: local || { id: String(remote.id), name: remote.name, number: String(remote.number), role: "CLUBE DE ESPORTES", emoji: "🏆" }, count: Number(remote.votes) || 0, pct: Number(remote.percentage) || 0 };
+      }).sort((a, b) => b.count - a.count);
+      total = rows.reduce((sum, row) => sum + row.count, 0);
+    } else {
+      total = CANDIDATES.reduce((sum, c) => sum + (Number(totals[c.id]) || 0), 0);
+      rows = [...CANDIDATES].map(c => {
+        const count = Number(totals[c.id]) || 0;
+        return { candidate: c, count, pct: total ? Math.round(count / total * 100) : 0 };
+      }).sort((a, b) => b.count - a.count);
+    }
+    list.innerHTML = rows.map(({ candidate: c, count, pct }) =>
+      `<article class="result-row"><div class="result-row-top"><div><div class="result-name">${c.emoji || "🏆"} ${c.name}</div><div class="result-number">Chapa ${c.number} · ${(c.role || "CLUBE DE ESPORTES").split("·").pop().trim()}</div></div><div class="result-count">${count}<small>${pct}% dos votos ${serverResults ? "no servidor" : "locais"}</small></div></div><div class="progress-track" role="progressbar" aria-label="Percentual de votos de ${c.name}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><div class="progress-fill" style="width:${pct}%"></div></div></article>`
+    ).join("");
     const totalEl = $("#totalVotes");
     if (totalEl) totalEl.textContent = String(total);
     const updated = $("#resultsUpdated");
-    if (updated) updated.textContent = `Atualizado às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+    if (updated) updated.textContent = `${serverResults ? "Apuração do servidor" : "Apuração local"} · ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
   }
   async function refreshResults() {
     renderResults();
@@ -234,15 +331,18 @@
     } catch (err) { console.error("Falha ao registrar Service Worker:", err); }
   }
   document.addEventListener("DOMContentLoaded", async () => {
+    loadCachedCandidates();
     renderCandidates();
+    await loadCandidatesFromAPI();
     await refreshResults();
+    await loadServerResults();
     registerServiceWorker();
     $("#confirmVote")?.addEventListener("click", registerVote);
     $("#cancelVote")?.addEventListener("click", () => $("#voteDialog")?.close());
     $("#syncButton")?.addEventListener("click", () => syncPending());
     $("#notifyButton")?.addEventListener("click", () => showLocalNotification("Eleição Esportiva", "Confira as propostas e acompanhe a apuração simulada.", "./index.html#candidatos"));
     $("#notifyResults")?.addEventListener("click", () => showLocalNotification("Apuração disponível", "Os resultados simulados do Clube de Esportes estão prontos para consulta.", "./resultado.html"));
-    $("#refreshResults")?.addEventListener("click", () => { refreshResults(); toast("Apuração atualizada neste dispositivo."); });
+    $("#refreshResults")?.addEventListener("click", async () => { await loadServerResults(); await refreshResults(); toast(serverResults ? "Apuração atualizada pelo backend." : "Apuração local atualizada; backend indisponível."); });
     window.addEventListener("online", () => { setConnectionUI(); syncPending({ silent: true }); });
     window.addEventListener("offline", setConnectionUI);
     setConnectionUI();

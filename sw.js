@@ -1,5 +1,5 @@
 /* Service Worker — Grupo 06 | Estratégia: cache-first para recursos estáticos e fallback offline. */
-const CACHE_NAME = "eleicao-esportiva-g6-v1";
+const CACHE_NAME = "eleicao-esportiva-g6-v3";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -78,17 +78,15 @@ async function notifyClients(message) {
 }
 
 async function processPendingSync() {
-  // Background Sync didático: processa a fila local no IndexedDB, mesmo se a aba
-  // não estiver aberta. Não há servidor; portanto, isto simula a conclusão local.
+  // A sincronização real envia a fila ao backend. Nunca apaga um voto só por estar na fila.
   const DB_NAME = "eleicao-esportiva-g6";
   const STORE = "operations";
+  const API_BASE = "https://eleicoesdigitais-back.vercel.app";
   const db = await new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
     request.onupgradeneeded = () => {
       const database = request.result;
-      if (!database.objectStoreNames.contains(STORE)) {
-        database.createObjectStore(STORE, { keyPath: "id", autoIncrement: true });
-      }
+      if (!database.objectStoreNames.contains(STORE)) database.createObjectStore(STORE, { keyPath: "id", autoIncrement: true });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -99,17 +97,38 @@ async function processPendingSync() {
     request.onsuccess = () => resolve(request.result || []);
     request.onerror = () => reject(request.error);
   });
-  if (pending.length) {
+  const syncedIds = [];
+  for (const item of pending) {
+    try {
+      const response = await fetch(`${API_BASE}/api/votes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidate_id: item.candidateId, voter_key: item.voterKey })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (response.ok || (response.status === 409 && /já registrou|já.*voto|already/i.test(result.error || ""))) {
+        syncedIds.push(item.id);
+      } else if (response.status >= 500 || response.status === 429) {
+        throw new Error(result.error || `Backend indisponível (${response.status})`);
+      }
+      // Erros de validação permanecem na fila para inspeção; não são apagados.
+    } catch (error) {
+      db.close();
+      await notifyClients(`Sincronização não concluída: ${error.message}`);
+      throw error; // permite ao navegador repetir o Background Sync
+    }
+  }
+  if (syncedIds.length) {
     await new Promise((resolve, reject) => {
       const tx = db.transaction(STORE, "readwrite");
       const store = tx.objectStore(STORE);
-      pending.forEach(item => store.delete(item.id));
+      syncedIds.forEach(id => store.delete(id));
       tx.oncomplete = resolve;
       tx.onerror = () => reject(tx.error);
     });
   }
   db.close();
-  await notifyClients(`${pending.length} operação(ões) processada(s) na simulação local.`);
+  await notifyClients(`${syncedIds.length} voto(s) sincronizado(s) com a API; ${pending.length - syncedIds.length} permanece(m) pendente(s).`);
 }
 
 self.addEventListener("sync", event => {
